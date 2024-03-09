@@ -1,0 +1,11 @@
+﻿TOPIC
+	about_ADMF.Helper
+	
+SHORT DESCRIPTION
+	Explains how to use the ADMF.Helper powershell module
+	
+LONG DESCRIPTION
+	<Insert Content here>
+
+KEYWORDS
+	ADMF.Helper

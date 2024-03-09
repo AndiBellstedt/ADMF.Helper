@@ -1,0 +1,36 @@
+pool:
+  vmImage: 'windows-latest'
+
+# Continuous integration only on branch development
+trigger:
+  branches:
+    include:
+    - development
+
+# Pull request validation only on branch master & development
+pr:
+  branches:
+    include:
+    - main
+    - development
+
+steps:
+- task: PowerShell@2
+  displayName: Ensure prerequisites
+  inputs:
+    targetType: filePath
+    filePath: './build/vsts-prerequisites.ps1'
+    arguments: '-ModuleName $(system.teamProject)'
+
+- task: PowerShell@2
+  displayName: Validate code compliance
+  inputs:
+    targetType: filePath
+    filePath: './build/vsts-validate.ps1'
+    arguments: '-ModuleName $(system.teamProject)'
+
+- task: PublishTestResults@2
+  displayName: 'Publish Test Results **/TEST-*.xml'
+  inputs:
+    testResultsFormat: NUnit
+  condition: always()
