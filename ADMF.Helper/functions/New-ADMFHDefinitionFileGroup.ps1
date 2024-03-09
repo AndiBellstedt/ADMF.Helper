@@ -6,7 +6,7 @@
     .DESCRIPTION
         The function is used to create definition files for organizational units (OUs) in a format that can be processed by the Active Directory Management Framework (ADMF).
         The function queries Active Directory for OUs starting from the specified `SearchBase`.
-        It excludes any OUs specified in `ExcludeDN`.
+        It excludes any OUs specified in `Exclude`.
         The resulting OUs are then transformed into an object format required by the ADMF command "Register-DMOrganizationalUnit".
 
         The transformed objects are then converted into the specified `FileType` (either "PSD1" or "JSON") and written to a file. The `FileName` parameter specifies the name of the file, and `OutputPath` specifies the directory where the file will be created.
@@ -33,9 +33,18 @@
 
         Defaults to the distinguished name of the current domain.
 
-    .PARAMETER ExcludeDN
+    .PARAMETER Exclude
         The distinguished name of an organizational unit to exclude from the search.
         Defaults to the distinguished name of the domain controllers container of the current domain.
+
+    .PARAMETER Include
+        The name of the organizational unit to include in the search.
+        Defaults to all.
+
+    .PARAMETER Filter
+        The filter to use for the query.
+
+        Defaults to "*".
 
     .PARAMETER FileType
         The type of the file to be created. Can be "PSD1" or "JSON".
@@ -61,6 +70,12 @@
 
     .PARAMETER Force
         If specified, the function will overwrite existing files.
+
+    .PARAMETER WhatIf
+        If this switch is enabled, no actions are performed but informational messages will be displayed that explain what would happen if the command were to run.
+
+    .PARAMETER Confirm
+        If this switch is enabled, you will be prompted for confirmation before executing any operations that change state.
 
     .EXAMPLE
         PS C:\> New-ADMFHDefinitionFileGroup

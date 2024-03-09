@@ -3,6 +3,10 @@
     .SYNOPSIS
         Converts an array of input objects into a PSD1 formatted string, with optional comments and formatting.
 
+    .DESCRIPTION
+        The ConvertTo-PSD1 function takes an array of input objects and converts them into a PSD1 formatted string.
+        The function can be used to generate PSD1 formatted strings for use in configuration files.
+
     .PARAMETER InputObject
         The array of objects to be converted to a PSD1 formatted string.
         This parameter is mandatory and can be piped into the function.
@@ -36,6 +40,8 @@
 
     .EXAMPLE
         PS> $myObject | ConvertTo-PSD1
+
+        Converts the pscustomobject in $myObject into a PSD1 formatted string
 
     #>
     param(

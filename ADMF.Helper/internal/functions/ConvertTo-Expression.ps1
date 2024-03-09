@@ -56,7 +56,7 @@ function ConvertTo-Expression {
         String[]. ConvertTo-Expression returns a PowerShell [String] expression
         for each input object.
 
-    .PARAMETER InputObject
+    .PARAMETER Object
         Specifies the objects to convert to a PowerShell expression. Enter a
         variable that contains the objects,  or type a command or expression
         that gets the objects. You can also pipe one or more objects to
@@ -98,6 +98,14 @@ function ConvertTo-Expression {
         also supplied,  all orginal (.Net) type names are shown.
         The -Explore switch is usefull for exploring object hyrachies and data
         type,  not for saving and transfering objects.
+
+    .PARAMETER TypeNaming
+        Specifies how to name the .Net types in the expression. The default
+        value is 'Auto'. The value can be 'Name',  'Fullname' or 'Auto'.
+
+    .PARAMETER NewLine
+        Specifies the new line character to use in the output expression. The
+        default value is [System.Environment]::NewLine.
 
     .EXAMPLE
 
@@ -168,16 +176,36 @@ function ConvertTo-Expression {
         https://www.powershellgallery.com/packages/ConvertFrom-Expression
     #>
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', '', Scope = 'Function')] # https://github.com/PowerShell/PSScriptAnalyzer/issues/1472
-    [CmdletBinding()][OutputType([scriptblock])] param(
-        [Parameter(ValueFromPipeLine = $True)][Alias('InputObject')] $Object,
-        [int]$Depth = 9,
-        [int]$Expand = $Depth,
-        [int]$Indentation = 4,
-        [string]$IndentChar = ' ',
-        [switch]$Strong,
-        [switch]$Explore,
-        [ValidateSet("Name", "Fullname", "Auto")][string]$TypeNaming = 'Auto',
-        [string]$NewLine = [System.Environment]::NewLine
+    [CmdletBinding()][OutputType([scriptblock])]
+    param(
+        [Parameter(ValueFromPipeLine = $True)]
+        [Alias('InputObject')]
+        $Object,
+
+        [int]
+        $Depth = 9,
+
+        [int]
+        $Expand = $Depth,
+
+        [int]
+        $Indentation = 4,
+
+        [string]
+        $IndentChar = ' ',
+
+        [switch]
+        $Strong,
+
+        [switch]
+        $Explore,
+
+        [ValidateSet("Name", "Fullname", "Auto")]
+        [string]
+        $TypeNaming = 'Auto',
+
+        [string]
+        $NewLine = [System.Environment]::NewLine
     )
 
     begin {

@@ -3,7 +3,7 @@
     RootModule           = 'ADMF.Helper.psm1'
 
     # Version number of this module.
-    ModuleVersion        = '0.2.0'
+    ModuleVersion        = '0.3.0'
 
     # ID used to uniquely identify this module
     GUID                 = '18182081-6c45-496e-9445-3df4083fa123'
@@ -83,7 +83,7 @@
                 'ADMF',
                 'Helper',
                 'ADMF.Helper',
-                'Active Directory Management Framework'
+                'ActiveDirectoryManagementFramework'
             )
 
             # A URL to the license for this module.

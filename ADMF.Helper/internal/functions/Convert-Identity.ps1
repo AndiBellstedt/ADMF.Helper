@@ -1,5 +1,35 @@
 ﻿function Convert-Identity {
+    <#
+    .SYNOPSIS
+        Converts a given identity name to its corresponding Security Identifier (SID).
+
+    .DESCRIPTION
+        The Convert-Identity function takes a name of a built-in user or group and converts it to its corresponding SID.
+        If the name is not a built-in name, it attempts to convert it to a SID using .NET classes.
+        If the conversion fails, it returns the original name.
+
+    .PARAMETER Name
+        The name of the built-in user or group to convert to a SID.
+
+    .PARAMETER BuiltInNamesOnly
+        A switch that, when present, causes the function to only convert names that correspond to built-in users or groups.
+
+    .EXAMPLE
+        Convert-Identity -Name "BUILTIN\Administrators"
+        Returns the SID for the built-in Administrators group: S-1-5-32-544
+
+    .INPUTS
+        System.String
+
+    .OUTPUTS
+        System.String
+
+    .NOTES
+        The function uses a hashtable to map built-in names to their corresponding SIDs.
+        For non-built-in names, it uses the System.Security.Principal.NTAccount and System.Security.Principal.SecurityIdentifier .NET classes to perform the conversion.
+    #>
     [CmdletBinding()]
+    [OutputType([string])]
     param (
         [Parameter(ValueFromPipeline = $true)]
         [string]
