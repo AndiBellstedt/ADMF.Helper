@@ -3,7 +3,7 @@
     $Repository = 'PSGallery'
 )
 
-$modules = @("Pester", "PSFramework", "PSModuleDevelopment", "PSScriptAnalyzer")
+$modules = @("Pester", "PSModuleDevelopment", "PSScriptAnalyzer")
 
 # Automatically add missing dependencies
 $data = Import-PowerShellDataFile -Path "$PSScriptRoot\..\ADMF.Helper\ADMF.Helper.psd1"
