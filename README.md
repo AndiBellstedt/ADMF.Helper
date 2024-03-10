@@ -40,10 +40,10 @@ There is a capability in ADMF.Helper that generates example configuration files 
 The function iterates through ADMF components, retrieves all available register commands and write sample config files. That might help to get familier with the given options in ADMF for new users.
 
 ## Create config from given structures
-The functions
+There is a capability in ADMF.Helper to create configuration files in PSD1 (default) or JSON format from the given Active Directory structure:
 ```powershell
     New-ADMFHDefinitionFileOrganizationalUnit
 ```
-
+This will create a file "root.psd1" within the domain and separate psd1 files for all sub OUs found under domain root.
 
 [logo]: assets/ADMF.Helper_128x128.png
