@@ -19,7 +19,7 @@ Functions in the module are *prefixed* with "`ADMFH`".
 The module has dependencies on *-for the obvious-* on ADMF module.
 
 # Changelog
-Changes will be tracked in the [changelog.md](ADMF.helper/changelog.md)
+Changes will be tracked in the [changelog.md](ADMF.Helper/changelog.md)
 This file is also the reference information within the module.
 
 # Installation
