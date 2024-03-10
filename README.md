@@ -1,31 +1,49 @@
-﻿# Description
+﻿![logo][]
+# ADMF.Helper
+| Plattform | Information |
+| --------- | ----------- |
+| PowerShell gallery | [![PowerShell Gallery](https://img.shields.io/powershellgallery/v/ADMF.Helper?label=psgallery)](https://www.powershellgallery.com/packages/ADMF.Helper) [![PowerShell Gallery](https://img.shields.io/powershellgallery/p/ADMF.Helper)](https://www.powershellgallery.com/packages/ADMF.Helper) [![PowerShell Gallery](https://img.shields.io/powershellgallery/dt/ADMF.Helper?style=plastic)](https://www.powershellgallery.com/packages/ADMF.Helper) |
+| GitHub  | [![GitHub release](https://img.shields.io/github/release/AndiBellstedt/ADMF.Helper.svg)](https://github.com/AndiBellstedt/ADMF.Helper/releases/latest) ![GitHub](https://img.shields.io/github/license/AndiBellstedt/ADMF.Helper?style=plastic) <br> ![GitHub issues](https://img.shields.io/github/issues-raw/AndiBellstedt/ADMF.Helper?style=plastic) <br> ![GitHub last commit (branch)](https://img.shields.io/github/last-commit/AndiBellstedt/ADMF.Helper/master?label=last%20commit%3A%20master&style=plastic) <br> ![GitHub last commit (branch)](https://img.shields.io/github/last-commit/AndiBellstedt/ADMF.Helper/Development?label=last%20commit%3A%20development&style=plastic) |
+<br>
 
-Insert a useful description for the ADMF.Helper project here.
+A PowerShell module with helper functions to support Active Directory Management Framework (ADMF).
 
-Remember, it's the first thing a visitor will see.
 
-# Project Setup Instructions
-## Working with the layout
+# Purpose
+The functions in the module should be a helper on building configuration files for ADMF, gettings the format of config files and some more things.\
+Even while ADMF is giving a lot of help and even examples on generating config from given infrastructure, the functions in the module might provide more convenience on larger scale.\
+\
+Functions provide examples and explanations on each parameter.\
+Functions in the module are *prefixed* with "`ADMFH`".
 
-- Don't touch the psm1 file
-- Place functions you export in `functions/` (can have subfolders)
-- Place private/internal functions invisible to the user in `internal/functions` (can have subfolders)
-- Don't add code directly to the `postimport.ps1` or `preimport.ps1`.
-  Those files are designed to import other files only.
-- When adding files & folders, make sure they are covered by either `postimport.ps1` or `preimport.ps1`.
-  This adds them to both the import and the build sequence.
+The module has dependencies on *-for the obvious-* on ADMF module.
 
-## Setting up CI/CD
+# Changelog
+Changes will be tracked in the [changelog.md](changelog.md)
+This file is also the reference information within the module.
 
-> To create a PR validation pipeline, set up tasks like this:
+# Installation
+In order to get started with the module, simply run this in an elevated console:
+```powershell
+Install-Module ADMF.Helper
+Import-Module ADMF.Helper
+Get-Command -Module ADMF.Helper
+```
+This will install the module on your system, ready for use.
 
-- Install Prerequisites (PowerShell Task; VSTS-Prerequisites.ps1)
-- Validate (PowerShell Task; VSTS-Validate.ps1)
-- Publish Test Results (Publish Test Results; NUnit format; Run no matter what)
+# Usage examples
+## Generating sample config files
+There is a capability in ADMF.Helper that generates example configuration files from the functions out of Active Directory Management Framework:
+```powershell
+    Invoke-ADMFHExampleGenerator
+```
+The function iterates through ADMF components, retrieves all available register commands and write sample config files. That might help to get familier with the given options in ADMF for new users.
 
-> To create a build/publish pipeline, set up tasks like this:
+## Create config from given structures
+The functions
+```powershell
+    New-ADMFHDefinitionFileOrganizationalUnit
+```
 
-- Install Prerequisites (PowerShell Task; VSTS-Prerequisites.ps1)
-- Validate (PowerShell Task; VSTS-Validate.ps1)
-- Build (PowerShell Task; VSTS-Build.ps1)
-- Publish Test Results (Publish Test Results; NUnit format; Run no matter what)
+
+[logo]: assets/ADMF.Helper_128x128.png
