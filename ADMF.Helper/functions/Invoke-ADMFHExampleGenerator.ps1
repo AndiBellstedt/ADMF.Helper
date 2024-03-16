@@ -32,6 +32,11 @@
     .PARAMETER ExcludedCommands
         An array of commands to exclude from the output files.
 
+    .PARAMETER FormatPretty
+        If specified, the function will attempt to format the output string to be more readable.
+        This includes padding keys to the same length and aligning the values.
+        Defaults to $true.
+
     .PARAMETER Indentation
         The number of characters to use for indentation in the output files.
 
@@ -75,8 +80,8 @@
 
     .NOTES
         AUTHOR:     Andi Bellstedt
-        VERSION:    1.0.0
-        DATE:       2023-12-27
+        VERSION:    1.1.0
+        DATE:       2024-03-16
         KEYWORDS:   ADMF, ADMFHelper, Example Configuration, Configuration File creator
 
     #>
@@ -89,8 +94,9 @@
         [string]
         $Path = $PWD.Path,
 
-        [Parameter(Position = 1)]
+        [Parameter(Position = 1, ValueFromPipelineByPropertyName = $true, ValueFromPipeline = $true)]
         [ValidateSet("DCManagement", "DomainManagement", "ForestManagement")]
+        [Alias("Name")]
         [string[]]
         $AdmfComponent = @("DCManagement", "DomainManagement", "ForestManagement"),
 
@@ -99,6 +105,9 @@
 
         [string[]]
         $ExcludedCommands,
+
+        [bool]
+        $FormatPretty = $true,
 
         [int]
         $Indentation = 4,
@@ -114,134 +123,146 @@
         $Force
     )
 
-
-    $indentString = [string]::Join(
-        "",
+    begin {
+        $indentString = [string]::Join(
+            "",
             (0 .. ($Indentation - 1) | ForEach-Object { $IndentChar })
-    )
+        )
+    }
 
+    process {
+        foreach ($moduleName in $AdmfComponent) {
+            Write-PSFMessage -Level Verbose -Message "Processing module '$moduleName'"
 
-
-    foreach ($moduleName in $AdmfComponent) {
-        Write-PSFMessage -Level Verbose -Message "Processing module '$moduleName'"
-
-        switch ($moduleName) {
-            "DCManagement" {
-                $prefix = "DC"
-            }
-
-            "DomainManagement" {
-                $prefix = "DM"
-            }
-
-            "ForestManagement" {
-                $prefix = "FM"
-            }
-
-            Default {}
-        }
-
-        if ("Register-$($prefix)Callback" -notin $ExcludedCommands) {
-            $ExcludedCommands += "Register-$($prefix)Callback"
-        }
-
-        # ensure module is loaded
-        if (-not (Get-Module -Name $moduleName -ErrorAction Ignore -Verbose:$false)) { Import-Module -Name $moduleName -Force  -Verbose:$false }
-
-        # get the module for version information
-        $module = Get-Module -Name $moduleName
-
-        # get all available register commands
-        $commands = Get-Command "Register-$($prefix)*"
-
-        # sort out excluded commands
-        if ($ExcludedCommands) {
-            $toExclude = foreach ($ExcludedCommand in $ExcludedCommands) {
-                $commands | Where-Object name -like $ExcludedCommand
-            }
-        }
-        if ($toExclude) {
-            Write-PSFMessage -Level Verbose -Message "Exclude from parsing: $([string]::Join(", ",$toExclude))"
-            $commands = $commands | Where-Object name -notin $toExclude.name
-        }
-
-        $filePath = (Join-Path -Path $Path -ChildPath ($module.Name + "_" + $module.Version))
-        Write-PSFMessage -Level Verbose -Message "Compose output file '$($fileaName)' with in path '$($filePath)'"
-        if (-not (Test-Path -Path $filePath -PathType Container)) {
-            Write-PSFMessage -Level Verbose -Message "Folder '$($filePath)' does not exist, creating it..."
-            $null = New-Item -Path $filePath -ItemType Directory -Force
-        }
-
-        Write-PSFMessage -Level SomewhatVerbose -Message "Processing $($commands.Count) commands"
-        foreach ($command in $commands) {
-            Write-PSFMessage -Level Verbose -Message "Processing command '$($command.Name)'"
-            # extract parameter sets
-            $parameterSets = $command.ParameterSets
-            $commonParameterNames = "Verbose", "Debug", "ErrorAction", "WarningAction", "InformationAction", "ErrorVariable", "WarningVariable", "InformationVariable", "OutVariable", "OutBuffer", "PipelineVariable"
-
-            Write-PSFMessage -Level SomewhatVerbose -Message "Found $($parameterSets.Count) parameter set(s) on command '$($command.Name)'"
-            $output = foreach ($parameterSet in $parameterSets) {
-                Write-PSFMessage -Level SomewhatVerbose -Message "Processing parameter set '$($parameterSet.Name)'"
-
-                # extract parameters and filter out common parameters
-                $parameters = $parameterSet.Parameters | Where-Object name -notin $commonParameterNames
-
-                # When multiple parameter sets are available, add a comment with the parameter set name
-                if ($parameterSets.count -gt 1) {
-                    "# Parameter Set: $($parameterSet.Name)"
-                    "# ---------------" + ([string]::join("", (0..($parameterSet.Name.Length - 1) | ForEach-Object { "-" } )))
+            switch ($moduleName) {
+                "DCManagement" {
+                    $prefix = "DC"
                 }
 
-                # Begin the hashtable
-                "@{"
-
-                # loop through the parameters and add a comment with the parameter description
-                Write-PSFMessage -Level SomewhatVerbose -Message "Processing $($parameters.Count) parameter(s) on parameter set '$($parameterSet.Name)' in command '$($command.Name)'"
-                foreach ($parameter in $parameters) {
-                    Write-PSFMessage -Level System -Message "Processing parameter '$($parameter.Name)'"
-
-                    # Build help comment if not suppressed
-                    if (-not $DoNotIncludeParameterHelpInformation) {
-                        Write-PSFMessage -Level System -Message "Build help comment for parameter '$($parameter.Name)'"
-                        $help = (Get-Help $command.Name -Parameter $parameter.name)
-
-                        "$($indentString)<#"
-
-                        $help.description.text.Split("`n") | ForEach-Object { "$($indentString)$($indentString)$($_)" }
-
-                        "$($indentString)#>"
-                    }
-
-                    "$($indentString)$($parameter.name) = '<$($parameter.ParameterType.Name)>'    # IsMandatory: $($parameter.IsMandatory)"
-
-                    if (-not $DoNotIncludeParameterHelpInformation) { "" }
+                "DomainManagement" {
+                    $prefix = "DM"
                 }
 
-                # End the hashtable
-                "}`n`n"
-            }
+                "ForestManagement" {
+                    $prefix = "FM"
+                }
 
-            # Prepare writing file
-            $fileaName = "example_$($command.Noun.replace($prefix, $null)).psd1"
-
-            $FileFullname = (Join-Path -Path $filePath -ChildPath $fileaName)
-            $paramOutFile = @{
-                FilePath = $FileFullname
-                Encoding = $Encoding
-            }
-            if ($Force) {
-                $paramOutFile.Add("Force", $true)
-            } else {
-                if(Test-Path -Path $FileFullname -PathType Leaf) {
-                    Write-PSFMessage -Level Warning -Message "File '$($FileFullname)' already exists and parameter -Force not specified. Skipping..."
+                Default {
+                    Write-PSFMessage -Level Error -Message "Unknown module '$moduleName'. Developers mistake? Skipping..."
                     continue
                 }
             }
 
-            # Write file
-            if($PSCmdlet.ShouldProcess($outPath, "Write example file for command '$($command.Name)'")) {
-                $output | Out-File @paramOutFile
+            if ("Register-$($prefix)Callback" -notin $ExcludedCommands) {
+                $ExcludedCommands += "Register-$($prefix)Callback"
+            }
+
+            # ensure module is loaded
+            if (-not (Get-Module -Name $moduleName -ErrorAction Ignore -Verbose:$false)) { Import-Module -Name $moduleName -Force  -Verbose:$false }
+
+            # get the module for version information
+            $module = Get-Module -Name $moduleName
+
+            # get all available register commands
+            $commands = Get-Command "Register-$($prefix)*"
+
+            # sort out excluded commands
+            if ($ExcludedCommands) {
+                $toExclude = foreach ($ExcludedCommand in $ExcludedCommands) {
+                    $commands | Where-Object name -like $ExcludedCommand
+                }
+            }
+            if ($toExclude) {
+                Write-PSFMessage -Level Verbose -Message "Exclude from parsing: $([string]::Join(", ",$toExclude))"
+                $commands = $commands | Where-Object name -notin $toExclude.name
+            }
+
+            $filePath = (Join-Path -Path $Path -ChildPath ($module.Name + "_" + $module.Version))
+            Write-PSFMessage -Level Verbose -Message "Compose output file '$($fileaName)' with in path '$($filePath)'"
+            if (-not (Test-Path -Path $filePath -PathType Container)) {
+                Write-PSFMessage -Level Verbose -Message "Folder '$($filePath)' does not exist, creating it..."
+                $null = New-Item -Path $filePath -ItemType Directory -Force
+            }
+
+            Write-PSFMessage -Level SomewhatVerbose -Message "Processing $($commands.Count) commands"
+            foreach ($command in $commands) {
+                Write-PSFMessage -Level Verbose -Message "Processing command '$($command.Name)'"
+                # extract parameter sets
+                $parameterSets = $command.ParameterSets
+                $commonParameterNames = "Verbose", "Debug", "ErrorAction", "WarningAction", "InformationAction", "ErrorVariable", "WarningVariable", "InformationVariable", "OutVariable", "OutBuffer", "PipelineVariable"
+
+                Write-PSFMessage -Level SomewhatVerbose -Message "Found $($parameterSets.Count) parameter set(s) on command '$($command.Name)'"
+                $output = foreach ($parameterSet in $parameterSets) {
+                    Write-PSFMessage -Level SomewhatVerbose -Message "Processing parameter set '$($parameterSet.Name)'"
+
+                    # extract parameters and filter out common parameters
+                    $parameters = $parameterSet.Parameters | Where-Object name -notin $commonParameterNames
+                    if ($parameters.Count -gt 1 -and $FormatPretty) {
+                        $maxLength = $parameters.Name | ForEach-Object { $_.trim().length } | Sort-Object | Select-Object -Last 1
+                    } else {
+                        $maxLength = 0
+                    }
+
+                    # When multiple parameter sets are available, add a comment with the parameter set name
+                    if ($parameterSets.count -gt 1) {
+                        "# Parameter Set: $($parameterSet.Name)"
+                        "# ---------------" + ([string]::join("", (0..($parameterSet.Name.Length - 1) | ForEach-Object { "-" } )))
+                    }
+
+                    # Begin the hashtable
+                    "@{"
+
+                    # loop through the parameters and add a comment with the parameter description
+                    Write-PSFMessage -Level SomewhatVerbose -Message "Processing $($parameters.Count) parameter(s) on parameter set '$($parameterSet.Name)' in command '$($command.Name)'"
+                    foreach ($parameter in $parameters) {
+                        Write-PSFMessage -Level System -Message "Processing parameter '$($parameter.Name)'"
+
+                        # Build help comment if not suppressed
+                        if (-not $DoNotIncludeParameterHelpInformation) {
+                            Write-PSFMessage -Level System -Message "Build help comment for parameter '$($parameter.Name)'"
+                            $help = (Get-Help $command.Name -Parameter $parameter.name)
+
+                            "$($indentString)<#"
+
+                            $help.description.text.Split("`n") | ForEach-Object { "$($indentString)$($indentString)$($_)" }
+
+                            "$($indentString)#>"
+                        }
+
+                        "$($indentString)$($parameter.name.PadRight($maxLength)) = '<$($parameter.ParameterType.Name)>'    # IsMandatory: $($parameter.IsMandatory)"
+
+                        if (-not $DoNotIncludeParameterHelpInformation) { "" }
+                    }
+
+                    # End the hashtable
+                    "}`n`n"
+                }
+
+                # Prepare writing file
+                $fileaName = "example_$($command.Noun.replace($prefix, $null)).psd1"
+
+                $FileFullname = (Join-Path -Path $filePath -ChildPath $fileaName)
+                $paramOutFile = @{
+                    FilePath = $FileFullname
+                    Encoding = $Encoding
+                }
+                if ($Force) {
+                    $paramOutFile.Add("Force", $true)
+                } else {
+                    if (Test-Path -Path $FileFullname -PathType Leaf) {
+                        Write-PSFMessage -Level Warning -Message "File '$($FileFullname)' already exists and parameter -Force not specified. Skipping..."
+                        continue
+                    }
+                }
+
+                # Write file
+                if ($PSCmdlet.ShouldProcess($outPath, "Write example file for command '$($command.Name)'")) {
+                    $output | Out-File @paramOutFile
+                }
             }
         }
+    }
+
+    end {
     }
 }
