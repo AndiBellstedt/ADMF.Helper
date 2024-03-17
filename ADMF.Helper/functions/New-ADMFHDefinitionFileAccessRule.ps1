@@ -71,8 +71,8 @@
     .EXAMPLE
         PS C:\> New-ADMFHDefinitionFileAccessRule
 
-        Generates a definition file "root.psd1" in for Access Rules on the root object of the current domain.
-        The file "root.psd1" will be created in the current directory and with UTF8 encoding.
+        Generates a definition file "DomainRoot_%domainFQDN%.psd1" in for Access Rules on the root object of the current domain.
+        The file "DomainRoot.psd1" will be created in the current directory and with UTF8 encoding.
 
     .EXAMPLE
         PS C:\> New-ADMFHDefinitionFileAccessRule -Path C:\ADMF -SearchScope Subtree
@@ -166,10 +166,11 @@
 
         # Loop through searchbase(s) and query OUs/container
         foreach ($searchBaseItem in $SearchBase) {
+            Write-PSFMessage -Level Verbose -Message "Collecting items from '$($searchBaseItem)'..."
+
             # Query container and OUs from searchbase
             $paramGetAdSearchbases = @{
                 LDAPFilter  = "(|(objectClass=container)(objectClass=organizationalUnit))"
-                #Filter      = $Filter
                 Properties  = @("canonicalName")
                 SearchBase  = $searchBaseItem
                 SearchScope = $SearchScope
@@ -177,13 +178,17 @@
             if ($Server) { $paramGetAdSearchbases.Server = $Server }
             if ($Credential) { $paramGetAdSearchbases.Credential = $Credential }
 
-            # Searach each and every object in SearchBase, but exclude the Policies container if it is the system container within a domain
-            if ($searchBaseItem -match '(?<DomainName>DC=.*)(\/|$)') { $seachDomainName = $Matches.DomainName } else { $seachDomainName = "*" }
-            $searchBases += Get-ADObject @paramGetAdSearchbases | Where-Object distinguishedname -notlike "*,CN=Policies,CN=System,$($seachDomainName)" | Sort-Object canonicalName | Select-Object -ExpandProperty distinguishedname
+            # Search each and every object in SearchBase, but exclude the (group) policies container if it is the system container within a domain
+            # this is done due to GPOs are in a different component of ADMF
+            if ($searchBaseItem -match '(,DC=([^,]+))+$') { $seachDomainName = $Matches[0].trim(",") } else { $seachDomainName = "*" }
+            $foundADObject = Get-ADObject @paramGetAdSearchbases | Where-Object distinguishedname -notlike "*,CN=Policies,CN=System,$($seachDomainName)" | Sort-Object canonicalName | Select-Object -ExpandProperty distinguishedname
+            Write-PSFMessage -Level System -Message "Found $($foundADObject.Count) items in '$($searchBaseItem)'. Adding to collection..."
+            $searchBases += $foundADObject
         }
 
         # if nothing found, searchbase might be a OU or a specific container without sub OUs/containers -> add itself to searchbases
         if (-not $searchBases) {
+            Write-PSFMessage -Level System -Message "No sub OUs/containers found. Adding searchbase itself to collection..."
             $searchBases += $SearchBase
         }
     }
@@ -191,7 +196,9 @@
     end {
         $searchBasesDone = [System.Collections.ArrayList]::new()
         $fileOutputData = [System.Collections.ArrayList]::new()
+        Write-PSFMessage -Level Verbose -Message "There are $($searchBases.Count) in collection. Going to process collection now"
         foreach ($SearchBaseItem in $searchBases) {
+            Write-PSFMessage -Level Verbose -Message "Processing '$($SearchBaseItem)'"
             # Query the searchbase it self, to determine the domain and get the adminSDHolder ACL
             $baseObject = Get-ADObject @paramAD -Identity $SearchBaseItem -Properties CanonicalName, nTSecurityDescriptor, adminCount
 
@@ -202,21 +209,17 @@
 
             $null = $searchBasesDone.Add($SearchBaseItem)
 
+            Write-PSFMessage -Level Debug -Message "Getting base domain of item '$($SearchBaseItem)'"
             $domain = Get-ADDomain @paramAD -Identity ($baseObject.CanonicalName.split('/')[0])
 
             # Query all objects from the searchbase
+            Write-PSFMessage -Level System -Message "Querying all objects from '$($baseObject.CanonicalName)'"
             [array]$objects = Get-ADObject @paramAD -Filter $Filter -SearchBase $SearchBaseItem -SearchScope $SearchScope -Properties CanonicalName, nTSecurityDescriptor, adminCount | Where-Object distinguishedname -notlike "*,CN=Policies,CN=System,$($domain.DistinguishedName)" | Sort-Object CanonicalName
             [array]$objects = $objects | Where-Object { $_.DistinguishedName -notin $searchBases }
             [array]$objects += $baseObject
             [array]$objects = $objects | Sort-Object CanonicalName -Unique
+            Write-PSFMessage -Level Verbose -Message "Found $($objects.Count) objects to process"
 
-            <#
-            $objects | Measure-Object
-            $objects | Format-Table
-            $searchBases
-            $searchBasesDone
-            $object = $objects  | ogv -OutputMode Single
-            #>
             $objects = foreach ($object in $objects) {
                 $found = $false
                 :inner foreach ($dn in ($searchBases | Where-Object { $_ -notin $searchBasesDone })) {
@@ -227,30 +230,36 @@
                 }
                 if (-not $found) { $object }
             }
+            Write-PSFMessage -Level Debug -Message "$($objects.Count) objects remain to process after filtering"
 
             # Loop through all
             $definitionObjects = [System.Collections.ArrayList]::new()
-            #$object = $objects[0]
             foreach ($object in $objects) {
+                Write-PSFMessage -Level Verbose -Message "Start processing of object '$($object.CanonicalName)'"
                 $aceList = [System.Collections.ArrayList]::new()
-                $objectAceList = $object.nTSecurityDescriptor.Access | Where-Object IsInherited -eq $false
+
+                [array]$objectAceList = $object.nTSecurityDescriptor.Access | Where-Object IsInherited -eq $false
+                Write-PSFMessage -Level Verbose -Message "Found $($objectAceList.Count) ACEs for '$($object.CanonicalName)'"
                 if (-not $objectAceList) {
                     Write-PSFMessage -Level Verbose -Message "No ACEs found for '$($object.CanonicalName)'. Skipping object..."
                     continue
                 }
 
+                # Get all ACEs that are in the default-ACL definition of the objectClass
                 $aceSpecialPermission = @()
-                # All ACEs that are in the default-ACL definition of the objectClass
                 $paramGetDefPerm = @{ ObjectClass = $object.ObjectClass }
                 if ($server) {
                     $paramGetDefPerm.Add("Server", $server)
                 } else {
-                    $paramGetDefPerm.Add("Server", (Get-ADDomainController -DomainName $domain.DNSRoot -ForceDiscover -Discover).Name)
+                    $paramGetDefPerm.Add("Server", (Get-ADDomainController @paramAD -DomainName $domain.DNSRoot -ForceDiscover -Discover).Name)
                 }
+                if ($Credential) { $paramGetDefPerm.Credential = $Credential }
+                Write-PSFMessage -Level System -Message "Getting default ACL definition from schema for objectClass '$($object.CanonicalName)'"
                 $aceSpecialPermission = Get-DMObjectDefaultPermission @paramGetDefPerm | ForEach-Object { Add-Member -InputObject $_ -MemberType NoteProperty -Name "IsDefault" -Value $true -PassThru -Force }
-
+                Write-PSFMessage -Level System -Message "Reveived $($aceSpecialPermission.Count) default ACEs for objectClass '$($object.CanonicalName)' from schema"
 
                 # Loop through all ACEs of the object and check if they are in the toCompare list, only add them if they are not
+                Write-PSFMessage -Level Debug -Message "Compare ACEs of object '$($object.CanonicalName)' with default ACEs to determine the 'default once' and mark them as 'no fix config' and 'is default'"
                 $defaultAceInObject = [System.Collections.ArrayList]::new()
                 :aceLoop foreach ($ace in $objectAceList) {
                     $ace | Add-Member -MemberType NoteProperty -Name "Present" -Value $true -Force
@@ -259,10 +268,10 @@
 
                     :toCompareAceLoop foreach ($aceSpecial in $aceSpecialPermission) {
                         if (Test-AceEquality -Rule1 $ace -Rule2 $aceSpecial) {
+                            Write-PSFMessage -Level Debug -Message "Mark ACE as schemaDefault: $($ace.AccessControlType) - '$($ace.ActiveDirectoryRights)' on Ä$($ace.IdentityReference)'"
                             $ace.NoFixConfig = $true
                             $ace.isDefault = $true
                             $null = $defaultAceInObject.Add($aceSpecial)
-                            #break toCompareAceLoop
                         }
                     }
 
@@ -275,11 +284,13 @@
                         $ace = $aceSpecial | Select-Object * -ExcludeProperty SID
                         $ace | Add-Member -MemberType NoteProperty -Name "Present" -Value $false -Force
                         $ace | Add-Member -MemberType NoteProperty -Name "NoFixConfig" -Value $false -Force
+                        Write-PSFMessage -Level Verbose -Message "ACE is in schemaDefault, but not on the object '$($object.CanonicalName)': $($ace.AccessControlType) - '$($ace.ActiveDirectoryRights)' on '$($ace.IdentityReference)'"
                         $null = $aceList.Add($ace)
                     }
                 }
 
                 # Convert to object with ADMF compatible format
+                Write-PSFMessage -Level Verbose -Message "Start converting $($aceList.count) ACEs to ADMF compatible format"
                 foreach ($ace in $aceList) {
                     # Resolve identity to SID
                     $identity = $ace.IdentityReference.tostring() | Convert-Identity -BuiltInNamesOnly
@@ -289,9 +300,11 @@
                     if (-not $identityDisplayName) {
                         try {
                             # Resolve SID to display name
+                            Write-PSFMessage -Level System -Message "Try resolving identity '$($ace.IdentityReference)' from SID to NTAccount"
                             $identityDisplayName = ([System.Security.Principal.SecurityIdentifier]$ace.IdentityReference).Translate([System.Security.Principal.NTAccount]).Value
                         } catch {
                             # search SID in domain via LDAP
+                            Write-PSFMessage -Level System -Message "Resolving identity '$($ace.IdentityReference)' from SID to NTAccount failed. Falling back to LDAP search."
                             $identityDisplayName = ([ADSI]"LDAP://<SID=$(($ace.IdentityReference).Value)>").name
 
                             # Fallback to global catalog
@@ -300,10 +313,14 @@
                                 $search = New-Object System.DirectoryServices.DirectorySearcher($root, "(objectSID=$(($ace.IdentityReference).Value))")
                                 $resultGC = $search.FindOne()
                                 $identityDisplayName = $resultGC.Properties.name
+                                Write-PSFMessage -Level System -Message "Identity '$($ace.IdentityReference)' found via LDAP: $($identityDisplayName)"
                             }
 
                             # Mark as unknown identity
-                            if (-not $identityDisplayName) { $identityDisplayName = "<<< Unknown identity>>>" }
+                            if (-not $identityDisplayName) {
+                                Write-PSFMessage -Level Warning -Message "Unable to resolve identity '$($ace.IdentityReference)'. Marking as unknown identity."
+                                $identityDisplayName = "<<< Unknown identity>>>"
+                            }
                         }
                     }
 
@@ -325,9 +342,17 @@
                     }
 
                     # Output admf defintion object
+                    Write-PSFMessage -Level System -Message "Compose ADMF definition object for '$($ace.IdentityReference)' on '$($object.CanonicalName)'"
+                    $objectDistinguishedName = $object.DistinguishedName
+                    # ensure it is no DN with a DC part beneath a container or OU (like RootDNS records in the system)
+                    if ($objectDistinguishedName.Split(",").Where({ $_ -notlike "DC=*" }) -and ($objectDistinguishedName -match "(,DC=([^,]+))+$")) {
+                        $objectDistinguishedName = $objectDistinguishedName -replace ($Matches[0].Trim(",")), '%DomainDN%'
+                    } else {
+                        $objectDistinguishedName = $objectDistinguishedName -replace 'DC=.+$', '%DomainDN%'
+                    }
                     $output = [PSCustomObject]@{
                         CanonicalName         = $object.CanonicalName
-                        Path                  = ($object.DistinguishedName -replace 'DC=.+$', '%DomainDN%')
+                        Path                  = $objectDistinguishedName
                         Identity              = $identity
                         identityDisplayName   = $identityDisplayName
                         ActiveDirectoryRights = $ace.ActiveDirectoryRights.tostring()
@@ -348,10 +373,12 @@
             # Convert to output format
             switch ($FileType) {
                 "JSON" {
+                    Write-PSFMessage -Level Verbose -Message "Converting $($definitionObjects.count) objects to JSON format"
                     $outputString = $definitionObjects | Select-Object * -ExcludeProperty canonicalname | ConvertTo-Json
                 }
 
                 "PSD1" {
+                    Write-PSFMessage -Level Verbose -Message "Converting $($definitionObjects.count) objects to PSD1 format"
                     [array]$outputString = foreach ($definitionObject in $definitionObjects) {
                         # Convert PSD1 string
                         $output = $definitionObject | Select-Object * -ExcludeProperty identityDisplayName | ConvertTo-PSD1 -CommentProperty 'canonicalname' -NoArrayWhenSingleObject -ForceIndentation
@@ -376,19 +403,21 @@
             #if ((-not $FileName) -or $resetFileName) {
             if ($resetFileName) {
                 $FileName = $baseObject.CanonicalName.TrimStart($baseObject.CanonicalName.Split("/", 2)[0]).trim("/").Replace(" ", "").Replace("_", "").replace("/", "_")
-                if (-not $FileName) { $FileName = "root" }
+                if (-not $FileName) { $FileName = "DomainRoot_$($domain.DNSRoot)" }
             }
             # Ensure that file name ends with file type
             $lowerFileType = ".$($FileType.ToLower())"
             if (-not $FileName.EndsWith($lowerFileType)) {
                 [string]$FileName = $FileName + $lowerFileType
             }
+            $filePath = Join-Path -Path $Path -ChildPath $FileName
+            Write-PSFMessage -Level Verbose -Message "The $($definitionObjects.count) definitions will be written to file '$($filePath)'."
 
 
             # Create file output data
             $null = $fileOutputData.Add(
                 [PSCustomObject]@{
-                    FilePath               = (Join-Path -Path $Path -ChildPath $FileName)
+                    FilePath               = $filePath
                     OutputString           = [string]$outputString
                     DefinitionObjectsCount = $definitionObjects.count
                     ObjectsCount           = $objects.count
@@ -398,6 +427,8 @@
 
         # Work through file output data (grouping by filepath)
         foreach ($fileGroup in ($fileOutputData | Group-Object FilePath)) {
+            Write-PSFMessage -Level Verbose -Message "Start processing of content for file '$($fileGroup.Name)'"
+
             # Combine data for one file together
             $stingGroupParts = $fileGroup.Group.OutputString | ForEach-Object { $_.TrimStart("(`n").TrimEnd("`n)") }
             $outputString = "(`n" + ($stingGroupParts -join ",`n") + "`n)"

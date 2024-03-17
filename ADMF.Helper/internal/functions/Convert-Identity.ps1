@@ -73,6 +73,7 @@
     }
 
     process {
+        Write-PSFMessage -Level System -Message "Converting identity '$($Name)'"
         if ($builtIn[$Name]) { return $builtIn[$Name] }
 
         $sid = $Name -as [System.Security.Principal.SecurityIdentifier]
