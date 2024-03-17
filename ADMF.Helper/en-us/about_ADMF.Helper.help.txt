@@ -1,0 +1,18 @@
+﻿TOPIC
+    about_ADMF.Helper
+
+SHORT DESCRIPTION
+    A PowerShell module with helper functions to support Active Directory Management Framework (ADMF).
+    The functions in the module should be a helper on building configuration files for ADMF, gettings the format of config files and some more things.
+
+LONG DESCRIPTION
+    The functions in the module should be a helper on building configuration files for ADMF, gettings the format of config files and some more things.
+    Even while ADMF is giving a lot of help and even examples on generating config from given infrastructure, the functions in the module might provide more convenience on larger scale.
+
+    Functions provide examples and explanations on each parameter.
+    Functions in the module are prefixed with "ADMFH".
+
+    The module has dependencies on -for the obvious- on ADMF module.
+
+KEYWORDS
+    ADMF.Helper
